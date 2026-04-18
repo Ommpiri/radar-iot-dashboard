@@ -11,7 +11,7 @@ import SystemStatus from './components/SystemStatus';
 import EventLog from './components/EventLog';
 import DetectionGraph from './components/DetectionGraph';
 import ConnectionModal from './components/ConnectionModal';
-import { Crosshair, PlugZap, BarChart2, List } from 'lucide-react';
+import { Crosshair, PlugZap, BarChart2, List, FlaskConical } from 'lucide-react';
 
 /* ── Clock ─────────────────────────────────────────────── */
 function LiveClock() {
@@ -29,13 +29,29 @@ function LiveClock() {
 
 /* ── Main Dashboard ─────────────────────────────────────── */
 function Dashboard() {
-  const { state } = useSystem();
+  const { state, dispatch } = useSystem();
   const [showConnect, setShowConnect] = useState(false);
   const [bottomTab, setBottomTab]     = useState<'graph' | 'log'>('graph');
   const [rightTab, setRightTab]       = useState<'controls' | 'status'>('controls');
 
-  const isArmed = state.armed;
+  const isArmed     = state.armed;
   const hwConnected = state.connected && state.connectionMode !== 'demo';
+  const isDemo      = state.demoActive;
+
+  const toggleDemo = () => {
+    if (hwConnected) return; // never kill a live hardware connection
+    if (isDemo) {
+      // Switch to LIVE / idle — stop simulation
+      dispatch({ type: 'STOP_DEMO' });
+      dispatch({ type: 'SET_CONNECTION_MODE', payload: 'websocket' });
+      dispatch({ type: 'SET_CONNECTED', payload: false });
+    } else {
+      // Switch to DEMO — start simulation
+      dispatch({ type: 'START_DEMO' });
+      dispatch({ type: 'SET_CONNECTION_MODE', payload: 'demo' });
+      dispatch({ type: 'SET_CONNECTED', payload: true });
+    }
+  };
 
   return (
     <div className="grid-bg" style={{
@@ -140,6 +156,31 @@ function Dashboard() {
 
         {/* Right controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+
+          {/* DEMO / LIVE toggle */}
+          <button
+            id="demo-toggle-btn"
+            onClick={toggleDemo}
+            disabled={hwConnected}
+            title={hwConnected ? 'Disconnect hardware first' : isDemo ? 'Switch to LIVE mode' : 'Switch to DEMO mode'}
+            className="btn-hud"
+            style={{
+              width: 'auto',
+              padding: '7px 14px',
+              fontSize: 9,
+              borderRadius: 8,
+              opacity: hwConnected ? 0.4 : 1,
+              cursor: hwConnected ? 'not-allowed' : 'pointer',
+              background: isDemo ? 'rgba(167,139,250,0.10)' : 'rgba(0,0,0,0.12)',
+              borderColor: isDemo ? 'rgba(167,139,250,0.45)' : 'rgba(255,255,255,0.12)',
+              color: isDemo ? '#a78bfa' : 'var(--muted)',
+              transition: 'all 0.2s',
+            }}
+          >
+            <FlaskConical size={11} />
+            {isDemo ? 'DEMO' : 'LIVE'}
+          </button>
+
           {/* Connect HW button */}
           <button
             onClick={() => setShowConnect(true)}
