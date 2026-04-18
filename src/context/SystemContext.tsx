@@ -38,6 +38,7 @@ export interface SystemState {
   sensorHealth: { ultrasonic: boolean; servo: boolean; controller: boolean };
   lastUpdate: number;
   demoActive: boolean;
+  terrain: 'LAND' | 'WATER' | 'AIR' | null; // ← ESP32 environment indicator
 }
 
 type Action =
@@ -51,6 +52,7 @@ type Action =
   | { type: 'SET_LATENCY'; payload: number }
   | { type: 'ADD_LOG'; payload: Omit<EventLogEntry, 'id' | 'timestamp'> }
   | { type: 'SET_SCANNER_ANGLE'; payload: number }
+  | { type: 'SET_TERRAIN'; payload: SystemState['terrain'] } // ← ESP32 LAND/WATER/AIR
   | { type: 'START_DEMO' }
   | { type: 'STOP_DEMO' };
 
@@ -71,6 +73,7 @@ const initialState: SystemState = {
   sensorHealth: { ultrasonic: true, servo: true, controller: true },
   lastUpdate: Date.now(),
   demoActive: true,
+  terrain: null,
 };
 
 function addLog(state: SystemState, entry: Omit<EventLogEntry, 'id' | 'timestamp'>): EventLogEntry[] {
@@ -159,6 +162,15 @@ function reducer(state: SystemState, action: Action): SystemState {
       return { ...state, eventLog: addLog(state, action.payload) };
     case 'SET_SCANNER_ANGLE':
       return { ...state, scannerAngle: action.payload };
+    case 'SET_TERRAIN':
+      return {
+        ...state,
+        terrain: action.payload,
+        eventLog: addLog(state, {
+          type: 'DETECTION',
+          message: `◈ Terrain mode → ${action.payload ?? 'UNKNOWN'}`,
+        }),
+      };
     case 'START_DEMO':
       return { ...state, demoActive: true };
     case 'STOP_DEMO':

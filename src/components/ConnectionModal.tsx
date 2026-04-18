@@ -68,12 +68,26 @@ export default function ConnectionModal({ onClose }: Props) {
   const [baudRate, setBaudRate] = useState(9600);
   const wsRef = useRef<WebSocket | null>(null);
   const disconnectRef = useRef<(() => void) | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttemptsRef = useRef(0);
+  const isManualDisconnectRef = useRef(false);
 
   const isConnected = state.connected && state.connectionMode !== 'demo';
 
   // ── Parse incoming data line ─────────────────────────────────────────
   const parseLine = useCallback((line: string) => {
-    const parts = line.trim().split(',');
+    const msg = line.trim();
+    console.log('[WS ←]', msg); // debug logging
+
+    // ── Terrain / environment keywords ────────────────────────────────
+    if (msg === 'LAND' || msg === 'WATER' || msg === 'AIR') {
+      console.log(`[WS] Terrain indicator: ${msg}`);
+      dispatch({ type: 'SET_TERRAIN', payload: msg as 'LAND' | 'WATER' | 'AIR' });
+      return;
+    }
+
+    // ── angle,distance CSV ────────────────────────────────────────────
+    const parts = msg.split(',');
     if (parts.length >= 2) {
       const angle = parseFloat(parts[0]);
       const distance = parseFloat(parts[1]);
@@ -110,13 +124,21 @@ export default function ConnectionModal({ onClose }: Props) {
 
 
   // ── WebSocket connect ────────────────────────────────────────────────
-  const connectWebSocket = () => {
+  const connectWebSocket = (url = wsUrl) => {
+    // Clear any pending reconnect
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
     setError('');
     setConnState('connecting');
     dispatch({ type: 'STOP_DEMO' });
 
+    console.log(`[WS] Connecting to ${url} (attempt ${reconnectAttemptsRef.current + 1})`);
+
     try {
-      const ws = new WebSocket(wsUrl);
+      const ws = new WebSocket(url);
       wsRef.current = ws;
       if (setWebSocketRef) setWebSocketRef(ws);
 
@@ -131,28 +153,39 @@ export default function ConnectionModal({ onClose }: Props) {
 
       ws.onopen = () => {
         clearTimeout(timeout);
+        reconnectAttemptsRef.current = 0; // reset back-off counter on success
         dispatch({ type: 'SET_CONNECTION_MODE', payload: 'websocket' });
         dispatch({ type: 'SET_CONNECTED', payload: true });
         setConnState('connected');
+        console.log('[WS] Connected successfully');
       };
 
       ws.onmessage = (e) => parseLine(e.data);
 
-      ws.onerror = () => {
+      ws.onerror = (ev) => {
         clearTimeout(timeout);
+        console.error('[WS] Error:', ev);
         setError('WebSocket error. Check that the ESP32 is online.');
         setConnState('error');
         dispatch({ type: 'START_DEMO' });
       };
 
-      ws.onclose = () => {
+      ws.onclose = (ev) => {
         clearTimeout(timeout);
-        if (connState === 'connected') {
-          dispatch({ type: 'SET_CONNECTED', payload: false });
-          dispatch({ type: 'SET_CONNECTION_MODE', payload: 'demo' });
-          dispatch({ type: 'START_DEMO' });
-          setConnState('idle');
-        }
+        console.log(`[WS] Closed — code ${ev.code}, clean: ${ev.wasClean}`);
+
+        if (isManualDisconnectRef.current) return; // user pressed Disconnect — no reconnect
+
+        dispatch({ type: 'SET_CONNECTED', payload: false });
+        dispatch({ type: 'SET_CONNECTION_MODE', payload: 'demo' });
+        dispatch({ type: 'START_DEMO' });
+        setConnState('idle');
+
+        // ── Auto-reconnect with exponential back-off (cap at 30 s) ──
+        reconnectAttemptsRef.current += 1;
+        const delay = Math.min(1000 * 2 ** reconnectAttemptsRef.current, 30_000);
+        console.log(`[WS] Reconnecting in ${delay / 1000}s (attempt ${reconnectAttemptsRef.current})...`);
+        reconnectTimeoutRef.current = setTimeout(() => connectWebSocket(url), delay);
       };
 
       disconnectRef.current = () => ws.close();
@@ -165,6 +198,12 @@ export default function ConnectionModal({ onClose }: Props) {
 
   // ── Disconnect ───────────────────────────────────────────────────────
   const disconnect = () => {
+    isManualDisconnectRef.current = true; // flag: suppress auto-reconnect
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+    reconnectAttemptsRef.current = 0;
     disconnectRef.current?.();
     disconnectRef.current = null;
     wsRef.current = null;
@@ -173,6 +212,9 @@ export default function ConnectionModal({ onClose }: Props) {
     dispatch({ type: 'START_DEMO' });
     setConnState('idle');
     setError('');
+    console.log('[WS] Manually disconnected');
+    // Reset the flag after a tick so future reconnects work
+    setTimeout(() => { isManualDisconnectRef.current = false; }, 0);
   };
 
   const handleConnect = () => {

@@ -65,6 +65,35 @@ export default function LiveDataPanel() {
         {/* Divider */}
         <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }} />
 
+        {/* Terrain / environment indicator — driven by ESP32 LAND/WATER/AIR messages */}
+        <div>
+          <div className="data-label" style={{ marginBottom: 6 }}>TERRAIN MODE</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {(() => {
+              const t = state.terrain;
+              const terrainColor =
+                t === 'WATER' ? 'var(--cyan)'
+                : t === 'AIR'   ? '#a78bfa'   // purple-ish
+                : t === 'LAND'  ? 'var(--green)'
+                : 'var(--muted)';
+              const icon = t === 'WATER' ? '◎' : t === 'AIR' ? '△' : t === 'LAND' ? '◆' : '—';
+              return (
+                <>
+                  <motion.div
+                    className="led"
+                    style={{ background: terrainColor, boxShadow: `0 0 8px ${terrainColor}` }}
+                    animate={{ opacity: t ? [1, 0.5, 1] : 0.3 }}
+                    transition={{ repeat: t ? Infinity : 0, duration: 1.2 }}
+                  />
+                  <span className="data-value" style={{ fontSize: 15, color: terrainColor, textShadow: `0 0 10px ${terrainColor}` }}>
+                    {icon} {t ?? 'UNKNOWN'}
+                  </span>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+
         {/* Detection status */}
         <div>
           <div className="data-label" style={{ marginBottom: 6 }}>DETECTION STATUS</div>
