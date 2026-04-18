@@ -35,7 +35,7 @@ function Dashboard() {
   const [rightTab, setRightTab]       = useState<'controls' | 'status'>('controls');
 
   const isArmed = state.armed;
-  const hwConnected = state.connectionMode !== 'demo';
+  const hwConnected = state.connected && state.connectionMode !== 'demo';
 
   return (
     <div className="grid-bg" style={{

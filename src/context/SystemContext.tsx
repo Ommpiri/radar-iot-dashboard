@@ -60,7 +60,7 @@ const initialState: SystemState = {
   armed: false,
   gateOpen: false,
   connected: false,
-  connectionMode: 'demo',
+  connectionMode: 'websocket',   // default to websocket mode
   latency: 0,
   currentAngle: 90,
   currentDistance: 0,
@@ -72,7 +72,7 @@ const initialState: SystemState = {
   detectionHistory: [],
   sensorHealth: { ultrasonic: true, servo: true, controller: true },
   lastUpdate: Date.now(),
-  demoActive: true,
+  demoActive: false,             // ← demo OFF by default
   terrain: null,
 };
 
